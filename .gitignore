@@ -1,0 +1,3 @@
+# Ignore results files and .config files
+results*.txt
+*.config
