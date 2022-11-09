@@ -317,10 +317,16 @@ gal_rad_std = np.std(gal_rad)
 # If std is above the max value, print that to the terminal
 if gal_ra_std > max_std:
 	print("Galaxy regions had differing RAs above user-specified limit set by max_std")
+	for n in range(0,len(obsids)):
+		print("OBSID:",obsids[n],"RA:",gal_ra[n],"deg")
 if gal_dec_std > max_std:
 	print("Galaxy regions had differing Decs above user-specified limit set by max_std")
+	for n in range(0,len(obsids)):
+		print("OBSID:",obsids[n],"Dec:",gal_dec[n],"deg")
 if gal_rad_std > max_std:
 	print("Galaxy regions had differing radii above user-specified limit set by max_std")
+	for n in range(0,len(obsids)):
+		print("OBSID:",obsids[n],"radius:",gal_rad[n],"deg")
 
 print("Using galaxy region with RA:",gal_ra_avg,"Dec:",gal_dec_avg,"Radius (deg):",gal_rad_avg)
 
