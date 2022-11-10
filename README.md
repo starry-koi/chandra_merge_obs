@@ -6,7 +6,7 @@ This code merges multiple Chandra observations together, and detects and analyze
 Setup
 ---
 
-You will need to download and install the current version of [CIAO](https://cxc.cfa.harvard.edu/ciao/). Additionally, this script was meant to be run after the user has already run `xray_flux.py` from the `chandra_xray_analysis` repo on all the individual observations. To this end the user should first run `chandra_xray_analysis` on all observations (without caring about merging), then copy-paste the relevant OBSID folders to the same directory as the chandra_merge_obs/ folder. The user will also need to copy-paste the `params.config` file they used in the run of `chandra_xray_analysis` into the chandra_merge_obs/ folder.
+You will need to download and install the current version of [CIAO](https://cxc.cfa.harvard.edu/ciao/). Additionally, this script was meant to be run after the user has already run `xray_flux.py` from the `chandra_xray_analysis` repo on all the individual observations. To this end the user should first run `chandra_xray_analysis` on all observations (without worrying about merging), then copy-paste the relevant OBSID folders to the same directory as the chandra_merge_obs/ folder. The user will also need to copy-paste the `params.config` file they used in the run of `chandra_xray_analysis` into the chandra_merge_obs/ folder.
 
 
 
@@ -17,7 +17,7 @@ Brief Rundown of the Code
 * We define our 'galaxy region' using the already-made galaxy region files located on the OBSID repro directories. For each galaxy region file, we retrieve the RA, Dec, and radius, then average them together to get the final coordinates and radius we'll use for our galaxy region. If we find that the individual regions' coordinates/radii differ above a user-specified limit (set by the `max_std` variable), we print this to the screen.
 * We run the CIAO function `wavdetect` on the merged data products to obtain a list of detected sources. We then focus in on only the sources that lie within the galaxy region.
 * We check the astrometry alignment between the different observations. Using the positions of the (merged) wavdetect sources as a starting point, we search for each source's centroid in each separate `new_evt2.fits` file and compare them. If the separations exceed a user-specified limit (set by the `max_sep` variable) we print the offsets of each source between each pair of OBSIDs, then quit the script, as merging observations with too large an astrometric offset can lead to incorrect results. See the relevant [CIAO thread](https://cxc.cfa.harvard.edu/ciao/threads/fluxes_multiobi/) for how to manually correct the astrometry of observations.
-* We next create our source regions using a similar method as in `xray_flux.py`. Unfortunately this method will not work if used directly on the merged images, so instead we create one source region per source using each OBSIDs' `new_evt2.fits` file (at the coordinates of the merged wavdetect source), then combine them to find the final source region radii. If the individual radii differ above a user-specified limit (again set my the `max_std` variable) we print this to the screen, along with all the individual radii for that specific source.
+* We next create our source regions using a similar method as in `xray_flux.py`. Unfortunately this method will not work if used directly on the merged images, so instead we create one source region per source using each OBSIDs' `new_evt2.fits` file (at the coordinates of the merged wavdetect source), then combine them to find the final source region radii. If the individual radii differ above a user-specified limit (again set by the `max_std` variable) we print this to the screen, along with all the individual radii for that specific source.
 * Finally, we get fluxes using `srcflux` and print out the results to a text file specific to the filtering band and flux band (`filter_check` and `band_check` variables respectively, in the same manner as in `chandra_xray_analysis`). This text file is located in the code folder.
 
 
@@ -25,18 +25,18 @@ Brief Rundown of the Code
 Variables the User Will Have to Care About
 ---
 
-Merging-specific parameters, as detailed in params_merged.config:
+Merging-specific parameters, as detailed in `params_merged.config`:
  
 * `distance`
- * The distance to the galaxy, in Mpc. You'll have to fill this in again, instead of just pulling the distance from the copy-pasted `params.config` file.
+  * The distance to the galaxy, in Mpc. You'll have to fill this in again, instead of just pulling the distance from the copy-pasted `params.config` file.
 * `band_check`
- * The same as it is for the `chandra_xray_analysis` repo, this is the energy band (in keV) you want to find source fluxes in, e.g. 0.5-2, 2-10, etc. You're required to put this in separately for the merging-specific code since there could be multiple repro/ folders in each OBSID from prior `chandra_xray_analysis` runs, so the code needs you to tell it where to look for files and the like.
+  * The same as it is for the `chandra_xray_analysis` repo, this is the energy band (in keV) you want to find source fluxes in, e.g. '0.5-2', '2-10', etc. You're required to put this in separately for the merging-specific code since there could be multiple repro/ folders in each OBSID from prior `chandra_xray_analysis` runs, so the code needs you to tell it where to look for files and the like.
 * `filter_check`
- * Same as for `chandra_xray_analysis`, band to filter the image by. 
+  * Similar as to `band_check`, except the filtering band isntead of the flux band.
 * `max_sep`
- * In arcseconds, this determines the maximum separation between detected source centroids from individual OBSIDs allowed before stopping the code due to astrometric alignment issues. Generally, this should be set to much less than a Chandra pixel (0.492 arcsec) and the default of 0.1 arcsec seems to do alright.
+  * In arcseconds, this determines the maximum separation between detected source centroids from individual OBSIDs allowed before stopping the code due to astrometric alignment issues. Generally, this should be set to much less than a Chandra pixel (0.492 arcsec) and the default of 0.1 arcsec seems to do alright.
 * `max_std`
- * A measure of how different averaged region radii can be before we start taking notice. When we average the different calculated radii, we also take their standard deviation (std), and if that exceeds this variable then we start printing information to the screen.
+  * A measure of how different averaged region radii can be before we start taking notice. When we average the different calculated radii, we also take their standard deviation (std), and if that exceeds this variable then we start printing information to the screen.
 
 The user will want to make sure that the `band_check` and `filter_check` parameters match which repro directory in the OBSIDs they want to look in. 
 
@@ -72,7 +72,7 @@ The results (source fluxes, etc.) will be printed to a .txt file located in the 
 Rerunning the Code
 ---
 
-This follows the same methodology as in `chandra_xray_analysis`, in that time-intensive CIAO tasks (such as `merge_obs`, `wavdetect`, and `srcflux`) are skipped if the corresponding folder is found to exist. Folder names and the tasks they correspond to are (all located within the relevant analysis.../ folder):
+This follows the same methodology as in `chandra_xray_analysis`, in that time-intensive CIAO tasks (such as `merge_obs`, `wavdetect`, and `srcflux`) are skipped if the corresponding folder is found to exist. Folder names and the tasks they correspond to are (all located within the relevant analysis/ folder):
 * merged/ - `merge_obs`
 * wavdet/ - `wavdetect`
 * flux/   - `srcflux`
@@ -90,10 +90,10 @@ If something went wrong
 ---
 
 * The code stopped saying it couldn't find the event files (`evt2.fits`)
- * This generally happens when there's a mismatch between the merging variables `filter_check` and `band_check`, and the repro/ directory inside the OBSID folder. You'll either need to update the merging-specific variables, or rerun `chandra_xray_analysis` on the individual OBSIDs using the filter band and flux band you want.
-* The code's terminal output says that 'Galaxy regions had differing RAs/Decs/radii above user-specified limit set by max_std`
- * The code finds the final galaxy region by averaging the galaxy regions from all the different to-be-merged OBSIDs. The code should have printed out all the RAs/Decs/radii that 
+  * This generally happens when there's a mismatch between the merging variables `filter_check` and `band_check`, and the repro/ directory inside the OBSID folder. You'll either need to update the merging-specific variables, or rerun `chandra_xray_analysis` on the individual OBSIDs using the filter band and flux band you want.
+* The code's terminal output says that 'Galaxy regions had differing RAs/Decs/radii above user-specified limit set by max_std'
+  * The code finds the final galaxy region by averaging the galaxy regions from all the different to-be-merged OBSIDs. The code should have printed out all the RAs/Decs/radii that exceeded the limit.
 * The code says 'Excessive offsets found!' after running `wavdetect` and stops there
- * If the astrometric offsets between OBSIDs are too large, merging could result in incorrect output. You may want to fine-tune the astrometry yourself (see the relevant [CIAO thread](https://cxc.cfa.harvard.edu/ciao/threads/fluxes_multiobi/))
+  * If the astrometric offsets between OBSIDs are too large, merging could result in incorrect output. You may want to fine-tune the astrometry yourself (see the relevant [CIAO thread](https://cxc.cfa.harvard.edu/ciao/threads/fluxes_multiobi/))
 * The code says 'Sources ... had differing per-obsid radii above user-specified limit set by max_std'
- * The code finds final source regions by calculating source regions on a per-OBSID basis, then combining them to find the radii to use for the final source region (the position is gotten from the merged wavdetect source). These generally shouldn't differ too much, assuming the galaxy of interest was at the aimpoint of the S3 chip for all observations. By default, `max_std` is set fairly low, so if the source radii don't look that different (< ~0.1 pixels) you're probably fine. If the radii have differences of ~1+ pixels, that's probably an indication that the methods used in this merging code might not work best for your case.
+  * The code finds final source regions by calculating source regions on a per-OBSID basis, then combining them to find the radii to use for the final source region (the position is gotten from the merged wavdetect source). These generally shouldn't differ too much, assuming the galaxy of interest was at the aimpoint of the S3 chip for all observations. By default, `max_std` is set fairly low, so if the source radii don't look that different (< ~0.1 pixels) you're probably fine. If the radii have differences of ~1+ pixels, that's probably an indication that the methods used in this merging code might not work best for your case.
