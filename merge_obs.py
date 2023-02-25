@@ -14,6 +14,7 @@ import warnings
 import pandas as pd
 import subprocess as sp
 import commentjson as cjson
+import poissonstats as ps #user-made file, has functions for finding the error for counts
 from sh import gunzip
 from astropy.io import fits
 from astropy.coordinates import SkyCoord
@@ -747,6 +748,100 @@ net_umflux_hi_str = data_list[net_umflux_hi_ind][0]
 net_umflux_low_str= data_list[net_umflux_low_ind][0]
 
 
+
+# Here we estimate the net counts. Since this uses the source and background areas in pixels, and assumes that the psffrac of each source
+# is what we injected (analysis_psfecf), this is only a reliable estimate when the sources are near the aimpoint of the S3 chip and if
+# the psffrac is indeed equal to analysis_psfecf. Usually, we can extract this information directly from the srcflux output file, but
+# that only works when analyzing individual observations, instead of a stack - when analyzing a stack, srcflux doesn't output most of the
+# source-specific information that we need, so we have to make do.
+
+# Much of this next bit of code is copy-pasted from the chandra_xray_analysis repo, with a few changes to variables to account for some
+# of the different variable names in this code (e.g. counts -> total_cnts). We include the comments from the original code for help
+# understanding what's happening.
+#------------------
+#So first we'll calculate the errors on net counts. We do this by plugging in the counts
+#(not background subtracted or aperture corrected) into the user-made error functions
+#kraftcl and gehrelscl that automate finding errors using the methods of Kraft et al. 1991
+#and Gehrels (1986). For sources with counts < 10 we use Kraft and take the background into
+#account (for calculating errors). For sources with counts > 10 we use Gehrels, and assume
+#the background is negligible.
+
+#This gives us the upper and lower limits e.g. counts = 5^{+2.42}_{-1.74} (though note I just
+#made those numbers up, I didn't run them through the error functions). Note that these limits
+#are for the *counts*, not the net_counts, which means they still need to be background 
+#subtracted and aperture corrected, so we do that next.
+
+#For example: if we have counts = 7, bg = 0.5, aperture = 0.9. We plug into kraftcl and get
+#limits of (2.97,11.87) for lower and upper (e.g. 7^{+4.87}_{-4.03}). We then background 
+#subtract and aperture correct everything, counts and limits: (value - 0.5)/0.9. From this
+#we get a value for the net counts of 7.22^{+5.41}_{-4.48}.
+
+
+#Then, we also consider the error bars on the upper and lower intervals, and if the ratio of
+#the two is less than sqrt(2), we consider them to be the same to within uncertainty, so we
+#add them in quadrature and use the result for both upper and lower intervals.
+
+#Following the previous example, the intervals are 5.41 and 4.48 for upper and lower, 
+#respectively. Their ratio is 5.41/4.48 = 1.21 < sqrt(2), so we add them in quadrature to get
+#4.97, which we use for both intervals, giving us a final value of 7.22^{+4.97}_{-4.97}. 
+
+#While we're doing this we also check whether any of the source counts are below the 
+#background to within the 95% confidence level (for Kraft). If for instance, the source 
+#counts are below the background (to within error) we'll mark it as a bad source. We include
+#it in analysis for convenience, but we'll keep track for the final stages of writing
+#everything out to a text document.
+
+bg_counts_in_src = total_bg_cnts/bg_areas*src_areas # Estimating the number of bg counts expected to be in the source aperture
+
+net_counts_calc	  = list([]) #used to store bg/aperture corrected net counts
+net_counts_errors = list([]) #used to store bg/aperture corrected net count error intervals
+good_src_list	  = list([]) #1 means good source, 0 means bad source
+
+temp_current_dir = os.getcwd()
+os.chdir(code_dir) #need to be in code dir. for error functions to work properly
+
+for m in range(0,np.size(ra)):
+	src_counts 	= total_cnts[m]
+	src_bg_counts 	= bg_counts_in_src[m]
+	src_psffrac	= analysis_psfecf # Here we assume the final psffrac is equal to what was specified by the user
+	
+	if src_counts < 10:
+		lims = np.array(ps.kraftcl(src_counts,src_bg_counts,1)) #find lims
+		
+		#Check whether source is above background to with 95% confidence level
+		checklims = ps.kraftcl(src_counts,src_bg_counts,2)
+		if checklims[0] < src_bg_counts:
+			good_src_list.append(0)
+		else:
+			good_src_list.append(1)
+	else:
+		lims = np.array(ps.gehrelscl(src_counts,1))
+		good_src_list.append(1) #as 95%cl test only matters for kraft
+	
+	#background/aperture correcting
+	cor_lims 	= (lims - src_bg_counts)/src_psffrac
+	cor_src_counts	= (src_counts - src_bg_counts)/src_psffrac
+	
+	#getting upper/lower intervals
+	cor_lim_up = cor_lims[1] - cor_src_counts
+	cor_lim_lo = cor_src_counts - cor_lims[0]
+	
+	#checking whether we need to add in quadrature or not
+	if max(cor_lim_up/cor_lim_lo,cor_lim_lo/cor_lim_up) < math.sqrt(2):
+		single_lim = math.sqrt( (cor_lim_up**2 + cor_lim_lo**2)/2 )
+		cor_lim_up = single_lim
+		cor_lim_lo = single_lim
+	
+	#Getting final intervals and adding them (and net counts) to the lists
+	fin_lims = np.array([cor_lim_lo,cor_lim_up])
+	net_counts_calc.append(cor_src_counts)
+	net_counts_errors.append(fin_lims)
+
+os.chdir(temp_current_dir) #move back to normal directory after calculating errors
+
+# Done estimating net counts, now onto saving the results.
+
+
 # Get a string for the flux reference, and get the source luminosities
 flxref 	= '(' + str(1/flux_ref) + ')'
 lum	= net_umflux*4*math.pi*(distance*3.086e24)**2
@@ -760,11 +855,14 @@ od[ra_str]			= ra
 od[dec_str]			= dec
 od[total_cnts_str]		= total_cnts
 od[total_bg_cnts_str]		= total_bg_cnts
+od['EST_NET_COUNTS']		= np.round(net_counts_calc,round_dec)
+od['EST_NET_COUNTS_ERR']	= [(round(x[0],round_dec),round(x[1],round_dec)) for x in net_counts_errors]
 od['SRC_AREA']			= np.round(src_areas,round_dec)
 od['BG_AREA']			= np.round(bg_areas,round_dec)
 od['SRC_RADIUS (PIX)']		= src_radii
 od['SRC_RADIUS_STD']		= src_radii_std
 od['SRC_RADIUS_DIF']		= src_differ_list
+od['GOOD_SOURCE']		= good_src_list
 od[num_obi_str]			= num_obi
 od[net_rate_str]		= net_rate
 od[umflux_cnv_str]		= umflux_cnv
@@ -781,7 +879,7 @@ summary_df 	= pd.DataFrame(od)
 summary_df_str 	= summary_df.to_string(justify='left',index=False)
 summary_file	= open('results_merged_'+band_check+'-band__'+filter_check+'-filter.txt','w')
 summary_file.write(summary_df_str)
-summary_file.write('\n\n\n\n'+':::OBSIDS - the obsids that were merged. \n:::SRC - source number. \n:::SRC_AREA - area of the source region, in pixels. Note that this was calculated purely from the radius, not extracted from srcflux results, as srcflux does not compute region areas when finding merged flux from multiple obsids. \n:::BG_AREA - same as SRC_AREA, in pixels. \n:::SRC_RADIUS - the radius for the circular source region. This was found by computing source radii for each separate obsid, then averaging them together. \n:::SRC_RADIUS_STD - the standard deviation of the different obsid-specific calculated source radii (that were then averaged together to give SRC_RADIUS). \n:::SRC_RADIUS_DIF - whether the standard deviation of the obsid-specific calculated source radii was above the user-defined limit of max_std. A 1 here means that they fell above this limit, a 0 means they didn\'t. \n:::NUM_OBI - number of observations where the source falls in the FOV. \n:::MERGED_NET_UMFLUX_APER - the unabsorbed (merged) flux as calculated by srcflux, in erg/s/cm**2, in multiples of the number in parentheses. For example, if the number in parantheses is (1e-15), and the value is 3.62, then the actual flux would be 3.62e-15 erg/s/cm**2.')
+summary_file.write('\n\n\n\n'+':::OBSIDS - the obsids that were merged. \n:::SRC - source number. \n:::EST_NET_COUNTS - the estimated net counts for each source. This value is estimated using the calculated source and background areas in pixels (SRC_AREA and BG_AREA), and for the aperture correction uses the user-specified analysis_psfecf variable. Normally all these values (region areas and psffrac) would be extracted from srcflux, but when running srcflux on a stack of event files (as is the case when merging) these values are not listed. This estimate is only likely to be good when the sources are near the aimpoint of the S3 chips in all observations, and if the psffracs of the source regions are close to what the user specified. This can be (and should be) checked against the results from analyzing the individual observations using chandra_xray_analysis. \n:::EST_NET_COUNTS_ERR - This was calculated in the same fashion as EST_NET_COUNTS, and should have all the same caveats applied to it. It is listed here in the same manner as in the results for chandra_xray_analysis (as follows). The gist of it is we calculate the errors based off of 90% confidence levels using the methods of Kraft et al. 1991 (for counts<10) and Gehrels 1986 (for counts>10). This gives us upper and lower error intervals, e.g. if NET_COUNTS is 3.01 and NET_COUNTS_ERR is (2.61,4.05), this means the net counts value (with error) is 3.01^{+4.05}_{-2.61}.  \n:::SRC_AREA - area of the source region, in pixels. Note that this was calculated purely from the radius, not extracted from srcflux results, as srcflux does not compute region areas when finding merged flux from multiple obsids. \n:::BG_AREA - same as SRC_AREA, in pixels. \n:::SRC_RADIUS - the radius for the circular source region. This was found by computing source radii for each separate obsid, then averaging them together. \n:::SRC_RADIUS_STD - the standard deviation of the different obsid-specific calculated source radii (that were then averaged together to give SRC_RADIUS). \n:::SRC_RADIUS_DIF - whether the standard deviation of the obsid-specific calculated source radii was above the user-defined limit of max_std. A 1 here means that they fell above this limit, a 0 means they didn\'t. \n:::GOOD_SOURCE - whether or not the source counts were above the detected background counts within a 95% confidence level. A 1 here means the source was good, a 0 means the source was bad and should likely not be considered in further analysis. \n:::NUM_OBI - number of observations where the source falls in the FOV. \n:::MERGED_NET_UMFLUX_APER - the unabsorbed (merged) flux as calculated by srcflux, in erg/s/cm**2, in multiples of the number in parentheses. For example, if the number in parantheses is (1e-15), and the value is 3.62, then the actual flux would be 3.62e-15 erg/s/cm**2.')
 summary_file.close()
 
 
