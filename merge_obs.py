@@ -159,12 +159,6 @@ if filter_check == '0.5-2':
 		print('Filter and band mismatch - please fix')
 		print('Filter: '+filter_check)
 		print('Band:   '+band_check)
-		sys.exit()
-if band_check == '0.5-2':
-	if filter_check != '0.5-2':
-		print('Filter and band mismatch - please fix')
-		print('Filter: '+filter_check)
-		print('Band:   '+band_check)
 		sys.exit()		
 if filter_check == '2-7':
 	if band_check != '2-10':
