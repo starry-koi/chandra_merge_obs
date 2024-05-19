@@ -86,9 +86,9 @@ Rerunning the Code
 
 This follows the same methodology as in `chandra_xray_analysis`, in that time-intensive CIAO tasks (such as `merge_obs`, `wavdetect`, and `srcflux`) are skipped if the corresponding folder is found to exist. Folder names and the tasks they correspond to are (all located within the relevant analysis/ folder):
 * merged/ - `merge_obs` (code run with `fine_correct` = 'make')
-* merged_finecor/ - `merge_obs` for finely-corrected images (code run with `fine_correct` = 'use'
+* merged_finecor/ - `merge_obs` for finely-corrected images (code run with `fine_correct` = 'use')
 * wavdet/ - `wavdetect` (code run with `fine_correct` = 'make')
-* wavdet_finecor/ - `savdetect` for finely-corrected images (code run with `fine_correct` = 'use'
+* wavdet_finecor/ - `savdetect` for finely-corrected images (code run with `fine_correct` = 'use')
 * flux/   - `srcflux`
 
 For more detail on this method, see the 'Rerunning the Code' section of the `chandra_xray_analysis` repo. In general, if you want to completely rerun the code (from scratch) using the same `filter_check` and `band_check` variables, you should delete the relevant analysis/ folder and then run `merge_obs.py`.
